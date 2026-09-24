@@ -1,10 +1,19 @@
+import base64
 import json
 from typing import List, Optional
 import urllib.request
-from google.cloud import firestore
+import uuid
+import google.auth
+import google.auth.transport.requests
+from google import genai
+from google.adk.tools import ToolContext
+from google.cloud import firestore, storage
+from google.genai import types
+import requests
 import sqlparse
 
 FIRESTORE_PROJECT = "qwiklabs-gcp-02-502ecf129e21"
+PUBLIC_BUCKET = "datacraft-assets-qwiklabs-gcp-02-502ecf129e21"
 
 
 def get_firestore_db() -> firestore.Client:
@@ -187,3 +196,128 @@ def fetch_data_tool_metadata(repo_path: str = "duckdb/duckdb") -> str:
         )
     except Exception as e:
         return f"Error fetching GitHub repository metadata for '{repo_path}': {e}"
+
+
+def generate_diagram_image(prompt: str, tool_context: Optional[ToolContext] = None) -> str:
+    """Generates a visual architecture diagram or ER diagram for data engineering pipelines and database schemas using gemini-3.1-flash-lite-image.
+
+    Args:
+        prompt: Detailed description of the diagram to generate (e.g. 'Architecture diagram of an ETL data pipeline from PostgreSQL to BigQuery').
+        tool_context: Optional ADK ToolContext used to save artifacts to the Playground panel.
+
+    Returns:
+        The public HTTPS URL of the generated image stored in Cloud Storage.
+    """
+    try:
+        client = genai.Client(vertexai=True, location="global")
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite-image",
+            contents=prompt,
+            config=types.GenerateContentConfig(response_modalities=[types.Modality.IMAGE]),
+        )
+
+        if not response.candidates or not response.candidates[0].content.parts:
+            return "Failed to generate image: No content returned from gemini-3.1-flash-lite-image model."
+
+        image_part = None
+        for part in response.candidates[0].content.parts:
+            if part.inline_data:
+                image_part = part
+                break
+
+        if not image_part:
+            return "Failed to generate image: No inline image data found in response."
+
+        img_bytes = image_part.inline_data.data
+        mime_type = image_part.inline_data.mime_type or "image/jpeg"
+        ext = "png" if "png" in mime_type else "jpg"
+        filename = f"diagram_{uuid.uuid4().hex[:8]}.{ext}"
+
+        # 1. Save artifact into ToolContext for Playground Artifacts panel
+        if tool_context is not None:
+            tool_context.save_artifact(filename=filename, artifact=image_part)
+
+        # 2. Upload image bytes directly from memory to public Cloud Storage bucket
+        storage_client = storage.Client(project=FIRESTORE_PROJECT)
+        bucket = storage_client.bucket(PUBLIC_BUCKET)
+        blob = bucket.blob(filename)
+        blob.upload_from_string(img_bytes, content_type=mime_type)
+
+        public_url = f"https://storage.googleapis.com/{PUBLIC_BUCKET}/{filename}"
+        return (
+            f"Generated architecture diagram successfully!\n"
+            f"Artifact File: {filename}\n"
+            f"Public Image URL: {public_url}"
+        )
+    except Exception as e:
+        return f"Error generating diagram image: {e}"
+
+
+def generate_domain_video(prompt: str, tool_context: Optional[ToolContext] = None) -> str:
+    """Generates a short animated video visualization for data engineering concepts, ETL pipelines, database synchronization, or schema transformations using Google's gemini-omni-flash-preview model in the global region.
+
+    Args:
+        prompt: Detailed description of the data engineering video animation to generate (e.g. 'A short animation of real-time event streaming from Kafka into BigQuery').
+        tool_context: Optional ADK ToolContext used to save artifacts to the Playground panel.
+
+    Returns:
+        The public HTTPS URL of the generated video stored in Cloud Storage.
+    """
+    try:
+        credentials, project = google.auth.default()
+        auth_req = google.auth.transport.requests.Request()
+        credentials.refresh(auth_req)
+
+        url = f"https://aiplatform.googleapis.com/v1beta1/projects/{FIRESTORE_PROJECT}/locations/global/interactions"
+        headers = {
+            "Authorization": f"Bearer {credentials.token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": "gemini-omni-flash-preview",
+            "input": [{"type": "text", "text": prompt}],
+            "response_format": [{"type": "video"}],
+            "generation_config": {"video_config": {"task": "text_to_video"}},
+        }
+
+        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        if resp.status_code != 200:
+            return f"Error calling gemini-omni-flash-preview: HTTP {resp.status_code} - {resp.text[:300]}"
+
+        data = resp.json()
+        video_b64 = None
+        mime_type = "video/mp4"
+
+        for step in data.get("steps", []):
+            if step.get("type") == "model_output" and "content" in step:
+                for item in step["content"]:
+                    if item.get("type") == "video" or "data" in item:
+                        video_b64 = item.get("data")
+                        mime_type = item.get("mime_type", "video/mp4")
+                        break
+
+        if not video_b64:
+            return "Failed to extract video bytes from gemini-omni-flash-preview model response."
+
+        video_bytes = base64.b64decode(video_b64)
+        filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
+
+        # 1. Save artifact into ToolContext for Playground Artifacts panel
+        if tool_context is not None:
+            artifact_part = types.Part.from_bytes(data=video_bytes, mime_type=mime_type)
+            tool_context.save_artifact(filename=filename, artifact=artifact_part)
+
+        # 2. Upload video bytes directly from memory to public Cloud Storage bucket
+        storage_client = storage.Client(project=FIRESTORE_PROJECT)
+        bucket = storage_client.bucket(PUBLIC_BUCKET)
+        blob = bucket.blob(filename)
+        blob.upload_from_string(video_bytes, content_type=mime_type)
+
+        public_url = f"https://storage.googleapis.com/{PUBLIC_BUCKET}/{filename}"
+        return (
+            f"Generated domain video successfully!\n"
+            f"Artifact File: {filename}\n"
+            f"Public Video URL: {public_url}"
+        )
+    except Exception as e:
+        return f"Error generating domain video: {e}"
