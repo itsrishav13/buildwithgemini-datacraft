@@ -44,6 +44,14 @@ Based on the implemented tools in [`app/tools.py`](app/tools.py) and [`app/agent
 
 ---
 
+## 🎬 Generated Media & Demo Assets
+
+* **Domain Video (`gemini-omni-flash-preview`)**: [Kafka to BigQuery Event Streaming Video](https://storage.googleapis.com/datacraft-assets-qwiklabs-gcp-02-502ecf129e21/video_49e8f4d6.mp4)
+* **Upbeat Lo-Fi Soundtrack**: [datacraft_demo_lofi_music.wav](https://storage.googleapis.com/datacraft-assets-qwiklabs-gcp-02-502ecf129e21/datacraft_demo_lofi_music.wav)
+* **Architecture Diagram**: [PostgreSQL to BigQuery Pipeline Diagram](https://storage.googleapis.com/datacraft-assets-qwiklabs-gcp-02-502ecf129e21/diagram_7f7b4389.jpg)
+
+---
+
 ## 📁 Repository Structure
 
 ```
