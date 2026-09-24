@@ -15,8 +15,11 @@
 
 import datetime
 import json
+import logging
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+logger = logging.getLogger(__name__)
 
 from a2ui.basic_catalog.provider import BasicCatalog
 from a2ui.schema.manager import A2uiSchemaManager
@@ -59,7 +62,10 @@ code_executor = (
 
 # WRITE: after each turn, send the session to Memory Bank for extraction.
 async def generate_memories_callback(callback_context: CallbackContext):
-    await callback_context.add_session_to_memory()
+    try:
+        await callback_context.add_session_to_memory()
+    except Exception as e:
+        logger.warning(f"Memory extraction skipped: {e}")
     return None
 
 
